@@ -57,6 +57,20 @@ describe("session rows as HTML Lines", () => {
 		);
 	});
 
+	it("starts ids with the owner's phone, like Realness", () => {
+		const row = entryToHtmlLine({ type: "label", id: "aa", parentId: "bb" }, SESSION, "+14155550100");
+		expect(row).toContain(`itemtype="/sessions/label" itemid="/+14155550100/sessions/${SESSION}/aa"`);
+		expect(row).toContain(`href="/+14155550100/sessions/${SESSION}/bb"`);
+		expect(entryToHtmlLine(header, "ignored", "+14155550100")).toContain(
+			`itemid="/+14155550100/sessions/${SESSION}"`,
+		);
+		expect(htmlLineToEntry(entryToHtmlLine(assistant, SESSION, "+14155550100"))).toEqual(roundTrip(assistant));
+		const html = sessionJsonlToHtml(JSON.stringify(assistant), SESSION, "+14155550100");
+		expect(html).toContain(`itemid="/+14155550100/sessions/${SESSION}/a1b2c3d4"`);
+		expect(() => entryToHtmlLine(header, SESSION, "14155550100")).toThrow(/phone/);
+		expect(() => entryToHtmlLine(header, SESSION, "+1/../x")).toThrow(/phone/);
+	});
+
 	it("gives the header its session's itemid", () => {
 		expect(entryToHtmlLine(header, "ignored")).toContain(`itemid="/sessions/${SESSION}"`);
 		expect(roundTrip(header)).toEqual(header);

@@ -1,9 +1,11 @@
 /**
  * Session entries as HTML Lines: one microdata row per line.
  *
- *   <article itemscope itemtype="/sessions/message" itemid="/sessions/<session>/<entry>">
- *   <link itemprop="parentId" href="/sessions/<session>/<parent>">...</article>
+ *   <article itemscope itemtype="/sessions/message" itemid="/+<phone>/sessions/<session>/<entry>">
+ *   <link itemprop="parentId" href="/+<phone>/sessions/<session>/<parent>">...</article>
  *
+ * Like Realness itemids, ids start with the owner's phone when one is known;
+ * without one they start at /sessions.
  * The entry `type` is the itemtype, its `id` the itemid, and a string `parentId`
  * a link to the parent row. Every other value keeps its JSON type:
  * strings are <span>, or <pre> when they span lines; numbers, booleans and null
@@ -16,6 +18,7 @@ export type JsonValue = null | boolean | number | string | JsonValue[] | { [key:
 export type JsonObject = { [key: string]: JsonValue };
 
 const ROOT = "/sessions";
+const OWNER = /^\+\d+$/;
 
 const TEXT_SPECIAL = /[&<>\u0000-\u0008\u000a-\u001f\u007f]/g;
 const ATTRIBUTE_SPECIAL = /[&"<>\u0000-\u0008\u000a-\u001f\u007f]/g;
@@ -57,11 +60,13 @@ function writeProps(object: JsonObject, skip: ReadonlySet<string> = new Set()): 
 }
 
 /** One entry as one row. Entries name their session; the header names itself. */
-export function entryToHtmlLine(entry: JsonObject, sessionId: string): string {
+export function entryToHtmlLine(entry: JsonObject, sessionId: string, owner?: string): string {
+	if (owner !== undefined && !OWNER.test(owner))
+		throw new Error(`Owner must be a phone like +14155550100, not ${owner}`);
 	const typed = typeof entry.type === "string";
 	const identified = typeof entry.id === "string";
 	const header = entry.type === "session";
-	const session = `${ROOT}/${segment(header && identified ? (entry.id as string) : sessionId)}`;
+	const session = `${owner ? `/${owner}` : ""}${ROOT}/${segment(header && identified ? (entry.id as string) : sessionId)}`;
 	let html = `<article itemscope itemtype="${ROOT}${typed ? `/${escapeAttribute(entry.type as string)}` : ""}"`;
 	if (identified)
 		html += ` itemid="${escapeAttribute(header ? session : `${session}/${segment(entry.id as string)}`)}"`;
@@ -191,7 +196,7 @@ export function htmlLineToEntry(line: string): JsonObject {
  * A JSONL session as HTML Lines. Entries before any header (fragments) take
  * `sessionId`, usually the id in the file name.
  */
-export function sessionJsonlToHtml(jsonl: string, sessionId: string): string {
+export function sessionJsonlToHtml(jsonl: string, sessionId: string, owner?: string): string {
 	let session = sessionId;
 	let html = "";
 	for (const [index, line] of jsonl.split("\n").entries()) {
@@ -203,7 +208,7 @@ export function sessionJsonlToHtml(jsonl: string, sessionId: string): string {
 			throw new Error(`Line ${index + 1} is not JSON`);
 		}
 		if (entry.type === "session" && typeof entry.id === "string") session = entry.id;
-		html += `${entryToHtmlLine(entry, session)}\n`;
+		html += `${entryToHtmlLine(entry, session, owner)}\n`;
 	}
 	return html;
 }
