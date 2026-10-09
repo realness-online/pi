@@ -45,6 +45,7 @@ import { getProviderEnvValue } from "../utils/provider-env.ts";
 import { retryProviderRequest } from "../utils/provider-retry.ts";
 import { sanitizeSurrogates } from "../utils/sanitize-unicode.ts";
 import { getSystemMessageText, renderSystemMessageUpdate } from "../utils/text.ts";
+import { sanitizeAssistantMessage, stripControlTokens } from "../utils/tool-call-leak.ts";
 import {
 	getDeclaredTools,
 	resolveTranscript,
@@ -697,6 +698,7 @@ export const stream: StreamFunction<"openai-completions", OpenAICompletionsOptio
 				throw new Error("Stream ended without finish_reason");
 			}
 
+			sanitizeAssistantMessage(output, getDeclaredTools(normalizedContext.messages));
 			stream.push({ type: "done", reason: output.stopReason, message: output });
 			stream.end();
 		} catch (error) {
@@ -1294,7 +1296,7 @@ export function convertMessages(
 					(block) =>
 						({
 							type: "text",
-							text: sanitizeSurrogates(block.text),
+							text: sanitizeSurrogates(stripControlTokens(block.text)),
 						}) satisfies ChatCompletionContentPartText,
 				);
 			const assistantText = assistantTextParts.map((part) => part.text).join("");
@@ -1315,7 +1317,7 @@ export function convertMessages(
 				if (compat.requiresThinkingAsText) {
 					// Convert thinking blocks to plain text (no tags to avoid model mimicking them)
 					const thinkingText = nonEmptyThinkingBlocks
-						.map((block) => sanitizeSurrogates(block.thinking))
+						.map((block) => sanitizeSurrogates(stripControlTokens(block.thinking)))
 						.join("\n\n");
 					assistantMsg.content = [{ type: "text", text: thinkingText }, ...assistantTextParts];
 				} else {
@@ -1336,7 +1338,9 @@ export function convertMessages(
 							signature = "reasoning_content";
 						}
 						if (signature && isOpenAICompletionsReasoningField(signature)) {
-							assistantMsg[signature] = nonEmptyThinkingBlocks.map((block) => block.thinking).join("\n");
+							assistantMsg[signature] = nonEmptyThinkingBlocks
+								.map((block) => stripControlTokens(block.thinking))
+								.join("\n");
 						}
 					}
 				}
