@@ -22,6 +22,7 @@ import type {
 import { createExtensionRuntime, loadExtensionFromFactory } from "../src/core/extensions/loader.ts";
 import type { ResourceLoader } from "../src/core/resource-loader.ts";
 import { SessionManager } from "../src/core/session-manager.ts";
+import { is_html_session, read_html_session } from "../src/core/session-storage.ts";
 import { SettingsManager } from "../src/core/settings-manager.ts";
 import { createCodingTools } from "../src/index.ts";
 
@@ -157,13 +158,19 @@ export function assistantMsg(text: string) {
  * message entries, otherwise the entry type (e.g. "session", "model_change").
  */
 export function readSessionFileRoles(file: string): string[] {
+	return readSessionFileRecords(file).map((record) => {
+		const message = record.message as { role?: string } | undefined;
+		return message?.role ?? (record.type as string);
+	});
+}
+
+/** Read session records from any stored format: .jsonl, .html, or .html.gz. */
+export function readSessionFileRecords(file: string): Record<string, unknown>[] {
+	if (is_html_session(file)) return read_html_session(file);
 	return readFileSync(file, "utf-8")
 		.trim()
 		.split("\n")
-		.map((line) => {
-			const record = JSON.parse(line);
-			return record.message?.role ?? record.type;
-		});
+		.map((line) => JSON.parse(line));
 }
 
 /**

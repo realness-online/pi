@@ -1,3 +1,5 @@
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
 
@@ -33,6 +35,11 @@ export const workspaceSourcePaths = {
 } as const;
 
 export default defineConfig({
+	test: {
+		// Sessions and settings a test makes without a folder land here, never in ~/.pi.
+		env: { PI_CODING_AGENT_DIR: join(tmpdir(), `pi-test-agent-${process.pid}`) },
+		globalSetup: [fileURLToPath(new URL("./vitest.home-guard.ts", import.meta.url))],
+	},
 	resolve: {
 		alias: [
 			{ find: /^@earendil-works\/chord$/, replacement: workspaceSourcePaths.chordIndex },

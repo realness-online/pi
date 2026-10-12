@@ -359,7 +359,7 @@ describe("AgentSessionRuntime characterization", () => {
 			{ type: "session_shutdown", reason: "fork", targetSessionFile: runtime.session.sessionFile },
 			{ type: "session_start", reason: "fork", previousSessionFile },
 		]);
-		const sessionFileName = parse(runtime.session.sessionFile!).name;
+		const sessionFileName = parse(runtime.session.sessionFile!).name.replace(/\.html$/, "");
 		expect(sessionFileName.endsWith(`_${runtime.session.sessionId}`)).toBe(true);
 
 		events.length = 0;

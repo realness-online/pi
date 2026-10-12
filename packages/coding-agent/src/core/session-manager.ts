@@ -1,3 +1,4 @@
+import { Readable } from "node:stream";
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import {
 	type AssistantMessage,
@@ -38,6 +39,16 @@ import {
 	createCompactionSummaryMessage,
 	createCustomMessage,
 } from "./messages.ts";
+import { htmlLineToEntry as html_line_to_entry } from "./session-html.ts";
+import {
+	append_compressed_entry,
+	encode_session_entry,
+	is_html_session,
+	is_session_file,
+	new_session_suffix,
+	read_html_session,
+	write_compressed_session,
+} from "./session-storage.ts";
 export const CURRENT_SESSION_VERSION = 3;
 
 export interface SessionHeader {
@@ -359,7 +370,9 @@ export function parseSessionEntries(content: string): FileEntry[] {
 	for (const line of lines) {
 		if (!line.trim()) continue;
 		try {
-			const entry = JSON.parse(line) as FileEntry;
+			const entry = (line.startsWith("<article ")
+				? html_line_to_entry(line)
+				: JSON.parse(line)) as unknown as FileEntry;
 			entries.push(entry);
 		} catch {
 			// Skip malformed lines
@@ -616,7 +629,7 @@ class SessionHeaderScanLimitError extends Error {
 function parseSessionEntryLine(line: string): FileEntry | null {
 	if (!line.trim()) return null;
 	try {
-		return JSON.parse(line) as FileEntry;
+		return (line.startsWith("<article ") ? html_line_to_entry(line) : JSON.parse(line)) as unknown as FileEntry;
 	} catch {
 		// Skip malformed lines
 		return null;
@@ -627,6 +640,10 @@ function parseSessionEntryLine(line: string): FileEntry | null {
 export function loadEntriesFromFile(filePath: string): FileEntry[] {
 	const resolvedFilePath = normalizePath(filePath);
 	if (!existsSync(resolvedFilePath)) return [];
+	if (is_html_session(resolvedFilePath)) {
+		const entries = read_html_session(resolvedFilePath) as unknown as FileEntry[];
+		return entries[0]?.type === "session" && typeof entries[0].id === "string" ? entries : [];
+	}
 
 	const entries: FileEntry[] = [];
 	let pending = "";
@@ -683,6 +700,10 @@ function parseSessionHeaderCandidate(line: string): SessionHeader | null | undef
 }
 
 function readSessionHeader(filePath: string): SessionHeader | null {
+	if (is_html_session(filePath)) {
+		const first = read_html_session(filePath)[0];
+		return first?.type === "session" && typeof first.id === "string" ? (first as unknown as SessionHeader) : null;
+	}
 	const fd = openSync(filePath, "r");
 	try {
 		const decoder = new StringDecoder("utf8");
@@ -751,7 +772,7 @@ export function findMostRecentSession(sessionDir: string, cwd?: string): string 
 	const resolvedCwd = cwd ? resolvePath(cwd) : undefined;
 	try {
 		const files = readdirSync(resolvedSessionDir)
-			.filter((file) => file.endsWith(".jsonl"))
+			.filter(is_session_file)
 			.map((file) => join(resolvedSessionDir, file))
 			.map((path) => ({ path, mtime: statSync(path).mtimeMs }))
 			.sort((a, b) => b.mtime - a.mtime);
@@ -811,11 +832,14 @@ async function buildSessionInfo(
 		let lastActivityTime: number | undefined;
 
 		const rl = createInterface({
-			input: createReadStream(filePath, { encoding: "utf8", signal }),
+			input: is_html_session(filePath)
+				? Readable.from(read_html_session(filePath).map((entry) => `${JSON.stringify(entry)}\n`))
+				: createReadStream(filePath, { encoding: "utf8", signal }),
 			crlfDelay: Infinity,
 		});
 
 		for await (const line of rl) {
+			signal?.throwIfAborted();
 			const entry = parseSessionEntryLine(line);
 			if (!entry) continue;
 
@@ -949,7 +973,7 @@ async function listSessionsFromDir(
 	try {
 		const dirEntries = await readdir(dir);
 		const files = dirEntries
-			.filter((file) => file.endsWith(".jsonl"))
+			.filter(is_session_file)
 			.sort((a, b) => b.localeCompare(a))
 			.map((file) => ({ path: join(dir, file) }));
 		const total = files.length;
@@ -966,6 +990,7 @@ async function listSessionsFromDir(
 			},
 			signal,
 		);
+		signal?.throwIfAborted();
 		return results.filter((info): info is SessionInfo => info !== null);
 	} catch {
 		signal?.throwIfAborted();
@@ -1077,7 +1102,7 @@ export class SessionManager {
 
 		if (this.persist) {
 			const fileTimestamp = timestamp.replace(/[:.]/g, "-");
-			this.sessionFile = join(this.getSessionDir(), `${fileTimestamp}_${this.sessionId}.jsonl`);
+			this.sessionFile = join(this.getSessionDir(), `${fileTimestamp}_${this.sessionId}.${new_session_suffix()}`);
 		}
 		return this.sessionFile;
 	}
@@ -1123,10 +1148,14 @@ export class SessionManager {
 
 	private _rewriteFile(): void {
 		if (!this.persist || !this.sessionFile) return;
+		if (this.sessionFile.endsWith(".html.gz")) {
+			write_compressed_session(this.sessionFile, this.fileEntries, this.sessionId);
+			return;
+		}
 		const fd = openSync(this.sessionFile, "w");
 		try {
 			for (const entry of this.fileEntries) {
-				writeFileSync(fd, `${JSON.stringify(entry)}\n`);
+				writeFileSync(fd, encode_session_entry(entry, this.sessionId, this.sessionFile));
 			}
 		} finally {
 			closeSync(fd);
@@ -1174,17 +1203,23 @@ export class SessionManager {
 
 		if (!this.flushed) {
 			if (!this._hasConversation()) return;
+			if (this.sessionFile.endsWith(".html.gz")) {
+				write_compressed_session(this.sessionFile, this.fileEntries, this.sessionId, true);
+				this.flushed = true;
+				return;
+			}
 			const fd = openSync(this.sessionFile, "wx");
 			try {
 				for (const e of this.fileEntries) {
-					writeFileSync(fd, `${JSON.stringify(e)}\n`);
+					writeFileSync(fd, encode_session_entry(e, this.sessionId, this.sessionFile));
 				}
 			} finally {
 				closeSync(fd);
 			}
 			this.flushed = true;
 		} else {
-			appendFileSync(this.sessionFile, `${JSON.stringify(entry)}\n`);
+			if (this.sessionFile.endsWith(".html.gz")) append_compressed_entry(this.sessionFile, entry, this.sessionId);
+			else appendFileSync(this.sessionFile, encode_session_entry(entry, this.sessionId, this.sessionFile));
 		}
 	}
 
@@ -1670,7 +1705,8 @@ export class SessionManager {
 		const newSessionId = createSessionId();
 		const timestamp = new Date().toISOString();
 		const fileTimestamp = timestamp.replace(/[:.]/g, "-");
-		const newSessionFile = join(this.getSessionDir(), `${fileTimestamp}_${newSessionId}.jsonl`);
+		const suffix = this.sessionFile?.endsWith(".html.gz") ? "html.gz" : new_session_suffix();
+		const newSessionFile = join(this.getSessionDir(), `${fileTimestamp}_${newSessionId}.${suffix}`);
 
 		const header: SessionHeader = {
 			type: "session",
@@ -1842,7 +1878,7 @@ export class SessionManager {
 		const newSessionId = options?.id ?? createSessionId();
 		const timestamp = new Date().toISOString();
 		const fileTimestamp = timestamp.replace(/[:.]/g, "-");
-		const newSessionFile = join(dir, `${fileTimestamp}_${newSessionId}.jsonl`);
+		const newSessionFile = join(dir, `${fileTimestamp}_${newSessionId}.${new_session_suffix()}`);
 
 		// Write new header pointing to source as parent, with updated cwd
 		const newHeader: SessionHeader = {
@@ -1853,12 +1889,21 @@ export class SessionManager {
 			cwd: resolvedTargetCwd,
 			parentSession: resolvedSourcePath,
 		};
-		writeFileSync(newSessionFile, `${JSON.stringify(newHeader)}\n`, { flag: "wx" });
+		if (newSessionFile.endsWith(".html.gz")) {
+			write_compressed_session(
+				newSessionFile,
+				[newHeader, ...sourceEntries.filter((entry) => entry.type !== "session")],
+				newSessionId,
+				true,
+			);
+			return new SessionManager(resolvedTargetCwd, dir, newSessionFile, true);
+		}
+		writeFileSync(newSessionFile, encode_session_entry(newHeader, newSessionId, newSessionFile), { flag: "wx" });
 
 		// Copy all non-header entries from source
 		for (const entry of sourceEntries) {
 			if (entry.type !== "session") {
-				appendFileSync(newSessionFile, `${JSON.stringify(entry)}\n`);
+				appendFileSync(newSessionFile, encode_session_entry(entry, newSessionId, newSessionFile));
 			}
 		}
 
@@ -1878,7 +1923,7 @@ export class SessionManager {
 
 		try {
 			for (const file of readdirSync(dir)) {
-				if (!file.endsWith(".jsonl")) continue;
+				if (!is_session_file(file)) continue;
 				const path = join(dir, file);
 				const header = readSessionHeaderForDiscovery(path);
 				if (header?.id !== id) continue;
@@ -1960,7 +2005,7 @@ export class SessionManager {
 				MAX_CONCURRENT_SESSION_DISCOVERY_LOADS,
 				async (dir) => {
 					try {
-						return (await readdir(dir)).filter((file) => file.endsWith(".jsonl")).map((file) => join(dir, file));
+						return (await readdir(dir)).filter(is_session_file).map((file) => join(dir, file));
 					} catch {
 						return [];
 					}
@@ -2003,6 +2048,7 @@ export class SessionManager {
 				},
 				abortSignal,
 			);
+			abortSignal?.throwIfAborted();
 
 			return sortSessionInfos(results.filter((info): info is SessionInfo => info !== null));
 		} catch {

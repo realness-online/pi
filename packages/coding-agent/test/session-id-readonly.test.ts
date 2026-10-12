@@ -187,7 +187,10 @@ describe("--session-id", () => {
 		mkdirSync(projectDir, { recursive: true });
 		const original = SessionManager.create(projectDir, sessionDir, { id: "renamed-id" });
 		persistSession(original, "persist me");
-		const renamedPath = join(sessionDir, "imported-session.jsonl");
+		const renamedPath = join(
+			sessionDir,
+			`imported-session${original.getSessionFile()!.endsWith(".html.gz") ? ".html.gz" : ".jsonl"}`,
+		);
 		renameSync(original.getSessionFile()!, renamedPath);
 
 		const reopened = await createSessionManager(
