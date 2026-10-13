@@ -1,11 +1,30 @@
-import type { Context } from "@earendil-works/chord";
-import { UserEntry } from "../entries.ts";
+import { type Context, copyJson, type JsonRepresentation } from "@earendil-works/chord";
 import { ConversationBusy } from "../errors.ts";
 import type { SessionImpl } from "../session/session.ts";
-import type { CommitPublication, ConversationId, Storage, SubmissionId, SubmissionRecord } from "../types.ts";
-import { GenerationTask } from "./generation.ts";
+import type {
+	CommitPublication,
+	ConversationId,
+	JsonObject,
+	Storage,
+	SubmissionId,
+	SubmissionRecord,
+	Tx,
+} from "../types.ts";
+import { startRun } from "./generation.ts";
+import {
+	appendInput,
+	applyBoundary,
+	hasQueuedReset,
+	InboxDoc,
+	isDisplayOnly,
+	isStale,
+	pickInputEntry,
+	prepareBoundary,
+	type QueueModes,
+	removeInboxItem,
+} from "./inbox.ts";
 import { LiveDoc } from "./live.ts";
-import type { SettledSubmissionRecord, Submission, SubmissionDraft } from "./types.ts";
+import type { InputEntry, SettledSubmissionRecord, Submission, SubmissionDraft, UserInput } from "./types.ts";
 import { closedError, Waiters } from "./util.ts";
 
 type AbortResult = "aborted" | "already_placed" | "settled";
@@ -15,57 +34,39 @@ export class Submissions {
 	readonly #session: SessionImpl;
 	readonly #storage: Storage;
 	readonly #now: () => number;
+	/** Read at each admission, on the Session line. */
+	readonly #queueModes: () => QueueModes;
 	/** Enable task scheduling; submitting or waiting asks for progress. */
 	readonly #resume: () => void;
 	readonly #waiters = new Waiters<SubmissionId, SettledSubmissionRecord>();
 	#closed = false;
 
-	constructor(session: SessionImpl, storage: Storage, now: () => number, resume: () => void) {
+	constructor(
+		session: SessionImpl,
+		storage: Storage,
+		now: () => number,
+		queueModes: () => QueueModes,
+		resume: () => void,
+	) {
 		this.#session = session;
 		this.#storage = storage;
 		this.#now = now;
+		this.#queueModes = queueModes;
 		this.#resume = resume;
-		session.subscribeCommits((publication) => this.#observe(publication));
+		session.observeCommits((publication) => this.#observe(publication));
 		session.subscribeClose(() => {
 			this.#closed = true;
-			this.#waiters.rejectAll(closedError());
+			this.#waiters.rejectAll(closedError(this.#session));
 		});
 	}
 
-	/**
-	 * Admit a submission in one commit. A known request ID returns its existing submission without writing. Until the
-	 * inbox exists, a busy conversation rejects with `ConversationBusy` and writes nothing. Idle input places a user
-	 * entry and starts a generation run; an idle write appends its entry and settles `done`.
-	 */
+	/** Admit a submission in one commit; see `admitSubmission()`. */
 	async submit(conversationId: ConversationId, draft: SubmissionDraft, context: Context): Promise<Submission> {
 		this.#resume();
-		const id = await this.#session.commitWith(async (tx) => {
-			if (draft.requestId !== undefined) {
-				const existing = await tx.submissionByRequest(conversationId, draft.requestId);
-				if (existing !== undefined) {
-					if (existing.type !== draft.type) {
-						throw new Error(
-							`Request ${draft.requestId} already identifies a submission of type ${existing.type}`,
-						);
-					}
-					return existing.id;
-				}
-			}
-			const live = await tx.doc(LiveDoc, conversationId);
-			if (live.run !== undefined) throw new ConversationBusy(conversationId);
-			const requestId = draft.requestId === undefined ? {} : { requestId: draft.requestId };
-			if (draft.type === "write") {
-				const entry = await tx.appendEntry(conversationId, draft.entry);
-				const write = { conversationId, ...requestId, type: "write", status: "done", entry: entry.id } as const;
-				return (await tx.createSubmission(write)).id;
-			}
-			const message = { role: "user", content: draft.content, timestamp: this.#now() } as const;
-			const entry = await tx.appendEntry(UserEntry, conversationId, { model: [message] });
-			const input = { conversationId, ...requestId, type: "input", status: "placed", entry: entry.id } as const;
-			const { id } = await tx.createSubmission(input);
-			live.run = { taskId: await tx.createTask(GenerationTask, {}, { conversationId }), inputs: [id] };
-			return id;
-		}, context);
+		const id = await this.#session.commitWith(
+			(tx) => admitSubmission(tx, conversationId, draft, this.#now(), this.#queueModes()),
+			context,
+		);
 		return new SubmissionHandle(id, this);
 	}
 
@@ -89,13 +90,13 @@ export class Submissions {
 			if (record === undefined) throw new Error(`Submission ${id} does not exist`);
 			if (isSettled(record)) return { promise: Promise.resolve(record) };
 			// Close rejects registered waiters synchronously and may begin during the read.
-			if (this.#closed) throw closedError();
+			if (this.#closed) throw closedError(this.#session);
 			return { promise: this.#waiters.add(id, context) };
 		});
 		return found.promise;
 	}
 
-	/** Withdraw a queued submission; placed inputs and settled submissions are reported, not changed. */
+	/** Withdraw a queued submission and remove its inbox item; placed inputs and settled submissions are reported. */
 	abort(id: SubmissionId, context: Context, conversationId?: ConversationId): Promise<AbortResult | "not_found"> {
 		return this.#session.commitWith(async (tx) => {
 			const record = await tx.submission(id);
@@ -104,6 +105,7 @@ export class Submissions {
 			}
 			if (record.status === "queued") {
 				tx.settleSubmission(id, { status: "unanswered", reason: "aborted" });
+				await removeInboxItem(tx, record.conversationId, id);
 				return "aborted";
 			}
 			return record.status === "placed" ? "already_placed" : "settled";
@@ -144,4 +146,96 @@ class SubmissionHandle implements Submission {
 
 function isSettled(record: SubmissionRecord): record is SettledSubmissionRecord {
 	return record.status === "done" || record.status === "unanswered";
+}
+
+/** Reject an input entry an untyped caller got wrong: its kind must be a non-empty string outside the `pi.` prefix. */
+function checkInputEntry(entry: InputEntry): void {
+	const { kind } = entry;
+	if (typeof kind !== "string" || kind.length === 0 || kind.startsWith("pi.")) {
+		throw new TypeError(
+			`An input entry's kind must be a non-empty string not starting with "pi.", got ${String(kind)}`,
+		);
+	}
+}
+
+/**
+ * Admit a submission inside a commit (spec §6); `Conversation.submit()` and conversation-owned compactions share it. A
+ * known request ID returns its existing submission without writing. A display-only write (only `kind` and `data`) is
+ * appended and settled `done` at once, busy or not, as it changes nothing the model sees; only behind a queued reset it
+ * queues, so it lands after the reset instead of before it in the context the reset ends. A busy conversation queues anything else in
+ * `pi.inbox`, or rejects `whenBusy: "reject"` input with `ConversationBusy`. An idle conversation with queued items
+ * queues it behind them and runs a final boundary. Otherwise idle input places its entry (`pi.user`, or the input's
+ * own) and starts a run, and an idle write appends its entry and settles `done`, or `stale` when its head reaches
+ * before the active range.
+ */
+export async function admitSubmission(
+	tx: Tx,
+	conversationId: ConversationId,
+	draft: SubmissionDraft,
+	now: number,
+	queueModes: QueueModes,
+): Promise<SubmissionId> {
+	if (draft.type === "input" && draft.entry !== undefined) checkInputEntry(draft.entry);
+	if (draft.requestId !== undefined) {
+		const existing = await tx.submissionByRequest(conversationId, draft.requestId);
+		if (existing !== undefined) {
+			if (existing.type !== draft.type) {
+				throw new Error(`Request ${draft.requestId} already identifies a submission of type ${existing.type}`);
+			}
+			return existing.id;
+		}
+	}
+	const requestId = draft.requestId === undefined ? {} : { requestId: draft.requestId };
+	if (
+		draft.type === "write" &&
+		isDisplayOnly(draft.entry) &&
+		!hasQueuedReset((await tx.doc(InboxDoc, conversationId)).items)
+	) {
+		const entry = await tx.appendEntry(conversationId, draft.entry);
+		const write = { conversationId, ...requestId, type: "write", status: "done", entry: entry.id } as const;
+		return (await tx.createSubmission(write)).id;
+	}
+	const live = await tx.doc(LiveDoc, conversationId);
+	const busy = live.run !== undefined;
+	if (busy && draft.type === "input" && draft.whenBusy === "reject") throw new ConversationBusy(conversationId);
+	// A boundary reads the table, so it is prepared before the first table write; a busy one needs none.
+	const boundary = busy ? undefined : await prepareBoundary(tx, conversationId, queueModes);
+	if (boundary === undefined || boundary.inbox.items.length > 0) {
+		const { id } = await tx.createSubmission({
+			conversationId,
+			...requestId,
+			type: draft.type,
+			status: "queued",
+		});
+		// Hosts may leave optional fields `undefined`; drafts take strict JSON.
+		const value = copyJson(draft.type === "write" ? draft.entry : draft.content, {
+			omitUndefinedProperties: true,
+		});
+		const items = (boundary?.inbox ?? (await tx.doc(InboxDoc, conversationId))).items;
+		if (draft.type === "write") items.push({ id, mode: "write", entry: value as JsonObject });
+		else {
+			const mode = draft.whenBusy === "steer" ? "steer" : "followUp";
+			const content = value as JsonRepresentation<UserInput>;
+			const entry = draft.entry === undefined ? {} : { entry: pickInputEntry(draft.entry) };
+			items.push({ id, mode, content, ...entry });
+		}
+		if (boundary === undefined) return id;
+		const { users } = await applyBoundary(tx, boundary, "final", now);
+		if (users.length > 0) await startRun(tx, conversationId, live, users);
+		return id;
+	}
+	if (draft.type === "write") {
+		if (isStale(boundary, draft.entry)) {
+			const stale = { status: "unanswered", reason: "stale" } as const;
+			return (await tx.createSubmission({ conversationId, ...requestId, type: "write", ...stale })).id;
+		}
+		const entry = await tx.appendEntry(conversationId, draft.entry);
+		const write = { conversationId, ...requestId, type: "write", status: "done", entry: entry.id } as const;
+		return (await tx.createSubmission(write)).id;
+	}
+	const entry = await appendInput(tx, conversationId, draft.content, draft.entry, now);
+	const input = { conversationId, ...requestId, type: "input", status: "placed", entry: entry.id } as const;
+	const { id } = await tx.createSubmission(input);
+	await startRun(tx, conversationId, live, [id]);
+	return id;
 }

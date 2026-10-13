@@ -41,12 +41,13 @@ The `brayness` branch carries local changes above an upstream base.
 The harness launcher is `../../bin/pi`. Its `fork-path` marker selects an
 installed fork and enables compressed sessions. `../../bin/pi-fork.js` checks
 installation proof before selection. Its `rollback` action removes the marker
-and returns to the stock launcher route; this is not a previous-fork rollback.
+and returns to the checkout's pinned runtime; this is not a previous-fork rollback.
 Keep the prior marker path when switching between verified fork installs.
 
-The harness's existing `npm run pi:update` updates stock Pi packages, not this
-fork. Do not use it to update the selected fork.
+The harness's `npm run pi:update` reinstalls the reviewed checkout pin. It does
+not advance upstream or update a separately selected fork.
 
-Current install verification helpers are in
-`../../artifacts/brayness/session-format/`. Review them against the target's
-packaging APIs before reuse. They are not a stable upstream interface.
+Release verification helpers are in `../../artifacts/pi/review-v1.2.0/`.
+Review them against the target's packaging APIs before reuse. They are not a
+stable upstream interface. Hydrate model data before checking a fresh worktree;
+build workspace dependencies before tests that spawn Node subprocesses.
