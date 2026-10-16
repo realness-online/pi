@@ -1,7 +1,7 @@
-# Brayness Pi fork
+# Realness Pi fork
 
 This is a maintained downstream fork. Upstream acceptance is not required.
-The `brayness` branch carries local changes above an upstream base.
+The `realness` branch carries local changes above an upstream base.
 
 ## Required local behavior
 
@@ -16,7 +16,7 @@ The `brayness` branch carries local changes above an upstream base.
 
 1. Run `git status --short`. Review, test, and commit local changes explicitly.
 2. Fetch `origin`. Select an upstream release tag and record its exact commit.
-3. Create an update branch and separate worktree inside the Brayness root.
+3. Create an update branch and separate worktree inside the Realness root.
 4. Compare the current upstream base with the target. Human review is required
    for upstream and dependency changes before merge.
 5. Merge the target into the update branch. Keep local commits in history;

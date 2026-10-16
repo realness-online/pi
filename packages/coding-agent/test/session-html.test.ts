@@ -14,7 +14,7 @@ const header = {
 	version: 3,
 	id: SESSION,
 	timestamp: "2026-09-30T18:00:00.000Z",
-	cwd: "/Users/scott/Desktop/brayness",
+	cwd: "/Users/scott/Desktop/realness",
 };
 
 const assistant: JsonObject = {

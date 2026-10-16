@@ -18,7 +18,7 @@ and truncates to the last verified gzip member. Checksum corruption stops the
 write. The saved tail is diagnostic data, not a complete session backup.
 
 This is an experimental storage switch, not a migration or rollback command.
-Live history conversion is not enabled. Brayness has a copied-history migration
+Live history conversion is not enabled. Realness has a copied-history migration
 trial with backup and rollback; old state references still need a cutover plan.
 
 ### Read-only decoder
