@@ -51,8 +51,11 @@ function writeValue(
 	links: LinkResolver | null,
 	path: readonly string[],
 ): string {
+	// The key path a list `<li>` (which has no itemprop) sits at is the array's, so a
+	// nested reference keeps its parent keys on both the writer and reader sides.
+	const keyPath = key === undefined ? path : [...path, key];
 	if (links && key !== undefined && (typeof value === "string" || typeof value === "number")) {
-		const href = links([...path, key], String(value));
+		const href = links(keyPath, String(value));
 		if (href !== undefined) return `<link itemprop="${escapeAttribute(key)}" href="${escapeAttribute(href)}">`;
 	}
 	const prop = key === undefined ? "" : ` itemprop="${escapeAttribute(key)}"`;
@@ -65,8 +68,8 @@ function writeValue(
 		return `<data${prop} value="${literal(value)}"></data>`;
 	}
 	if (Array.isArray(value))
-		return `<ol${prop}>${value.map((item) => `<li>${writeValue(undefined, item, links, path)}</li>`).join("")}</ol>`;
-	if (typeof value === "object") return `<div${prop} itemscope>${writeProps(value, new Set(), links, path)}</div>`;
+		return `<ol${prop}>${value.map((item) => `<li>${writeValue(undefined, item, links, keyPath)}</li>`).join("")}</ol>`;
+	if (typeof value === "object") return `<div${prop} itemscope>${writeProps(value, new Set(), links, keyPath)}</div>`;
 	throw new Error(`Not a JSON value: ${typeof value}`);
 }
 
