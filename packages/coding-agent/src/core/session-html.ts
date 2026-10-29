@@ -20,8 +20,10 @@ export type JsonObject = { [key: string]: JsonValue };
 const ROOT = "/sessions";
 const OWNER = /^\+\d+$/;
 
-const TEXT_SPECIAL = /[&<>\u0000-\u0008\u000a-\u001f\u007f]/g;
-const ATTRIBUTE_SPECIAL = /[&"<>\u0000-\u0008\u000a-\u001f\u007f]/g;
+// A lone UTF-16 surrogate has no UTF-8 encoding; it is written as a reference so it survives.
+const LONE_SURROGATE = "[\\uD800-\\uDBFF](?![\\uDC00-\\uDFFF])|(?<![\\uD800-\\uDBFF])[\\uDC00-\\uDFFF]";
+const TEXT_SPECIAL = new RegExp(`[&<>\\u0000-\\u0008\\u000a-\\u001f\\u007f]|${LONE_SURROGATE}`, "g");
+const ATTRIBUTE_SPECIAL = new RegExp(`[&"<>\\u0000-\\u0008\\u000a-\\u001f\\u007f]|${LONE_SURROGATE}`, "g");
 const NAMED: Record<string, string> = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" };
 const reference = (character: string) => NAMED[character] ?? `&#${character.charCodeAt(0)};`;
 const escapeText = (value: string) => value.replace(TEXT_SPECIAL, reference);

@@ -73,9 +73,11 @@
       function buildTree() {
         const nodeMap = new Map();
         const roots = [];
+        // Rows without parentId (other writers' records) are not tree entries.
+        const treeEntries = entries.filter((entry) => 'parentId' in entry);
 
         // Create nodes
-        for (const entry of entries) {
+        for (const entry of treeEntries) {
           nodeMap.set(entry.id, {
             entry,
             children: [],
@@ -84,7 +86,7 @@
         }
 
         // Build parent-child relationships
-        for (const entry of entries) {
+        for (const entry of treeEntries) {
           const node = nodeMap.get(entry.id);
           if (entry.parentId === null || entry.parentId === undefined || entry.parentId === entry.id) {
             roots.push(node);

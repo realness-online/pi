@@ -400,6 +400,20 @@ function buildEntryIndex(entries: SessionEntry[], byId?: Map<string, SessionEntr
 	return index;
 }
 
+/**
+ * Whether an entry is part of the conversation tree. Rows without a `parentId`
+ * (records other writers keep in the same file, such as Durable's tasks) are
+ * loaded and indexed but are never roots, children, or the leaf.
+ */
+export function isTreeEntry(entry: SessionEntry): boolean {
+	return "parentId" in entry;
+}
+
+function lastTreeEntry(entries: SessionEntry[]): SessionEntry | undefined {
+	for (let i = entries.length - 1; i >= 0; i--) if (isTreeEntry(entries[i])) return entries[i];
+	return undefined;
+}
+
 function buildSessionPath(
 	entries: SessionEntry[],
 	leafId?: string | null,
@@ -413,7 +427,7 @@ function buildSessionPath(
 	if (leafId) {
 		leaf = index.get(leafId);
 	}
-	leaf ??= entries[entries.length - 1];
+	leaf ??= lastTreeEntry(entries);
 	if (!leaf) {
 		return [];
 	}
@@ -1133,7 +1147,7 @@ export class SessionManager {
 		for (const entry of this.fileEntries) {
 			if (entry.type === "session") continue;
 			this.byId.set(entry.id, entry);
-			this.leafId = entry.id;
+			if (isTreeEntry(entry)) this.leafId = entry.id;
 			if (entry.type === "label") {
 				if (entry.label) {
 					this.labelsById.set(entry.targetId, entry.label);
@@ -1562,7 +1576,7 @@ export class SessionManager {
 	 * Orphaned entries (broken parent chain) are also returned as roots.
 	 */
 	getTree(): SessionTreeNode[] {
-		const entries = this.getEntries();
+		const entries = this.getEntries().filter(isTreeEntry);
 		const nodeMap = new Map<string, SessionTreeNode>();
 		const roots: SessionTreeNode[] = [];
 

@@ -44,6 +44,15 @@ const assistant: JsonObject = {
 const roundTrip = (entry: JsonObject) => htmlLineToEntry(entryToHtmlLine(entry, SESSION));
 
 describe("session rows as HTML Lines", () => {
+	it("keeps lone surrogates through UTF-8", () => {
+		const entry = { type: "custom", id: "s1", parentId: null, text: "a\uD800b\uDC00c\uD83D\uDE00d" };
+		const row = entryToHtmlLine(entry, SESSION);
+		expect(row).toContain("&#55296;");
+		expect(row).toContain("&#56320;");
+		expect(row).toContain("\uD83D\uDE00");
+		expect(htmlLineToEntry(Buffer.from(row, "utf8").toString("utf8"))).toEqual(entry);
+	});
+
 	it("names the row by itemtype and itemid, and links its parent", () => {
 		const row = entryToHtmlLine(
 			{ type: "label", id: "aa", parentId: "bb", timestamp: "t", targetId: "cc", label: "x" },
