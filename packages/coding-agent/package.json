@@ -19,6 +19,14 @@
 		},
 		"./rpc-entry": {
 			"import": "./dist/bundle/rpc-entry.js"
+		},
+		"./session-rows": {
+			"types": "./dist/core/session-rows/index.d.ts",
+			"import": "./dist/core/session-rows/index.js"
+		},
+		"./session-rows/node": {
+			"types": "./dist/core/session-rows/node.d.ts",
+			"import": "./dist/core/session-rows/node.js"
 		}
 	},
 	"files": [
