@@ -39,7 +39,22 @@ const literal = (value: number | boolean | null) => (Object.is(value, -0) ? "-0"
 const segment = (id: string) => encodeURIComponent(id);
 const lastSegment = (path: string) => decodeURIComponent(path.slice(path.lastIndexOf("/") + 1));
 
-function writeValue(key: string | undefined, value: JsonValue): string {
+/**
+ * Turns a reference value into the href of the row it points at. Given the key path
+ * and the value, return the full href, or undefined to write the value normally.
+ */
+export type LinkResolver = (path: readonly string[], value: string) => string | undefined;
+
+function writeValue(
+	key: string | undefined,
+	value: JsonValue,
+	links: LinkResolver | null,
+	path: readonly string[],
+): string {
+	if (links && key !== undefined && (typeof value === "string" || typeof value === "number")) {
+		const href = links([...path, key], String(value));
+		if (href !== undefined) return `<link itemprop="${escapeAttribute(key)}" href="${escapeAttribute(href)}">`;
+	}
 	const prop = key === undefined ? "" : ` itemprop="${escapeAttribute(key)}"`;
 	if (typeof value === "string")
 		return value.includes("\n")
@@ -50,19 +65,28 @@ function writeValue(key: string | undefined, value: JsonValue): string {
 		return `<data${prop} value="${literal(value)}"></data>`;
 	}
 	if (Array.isArray(value))
-		return `<ol${prop}>${value.map((item) => `<li>${writeValue(undefined, item)}</li>`).join("")}</ol>`;
-	if (typeof value === "object") return `<div${prop} itemscope>${writeProps(value)}</div>`;
+		return `<ol${prop}>${value.map((item) => `<li>${writeValue(undefined, item, links, path)}</li>`).join("")}</ol>`;
+	if (typeof value === "object") return `<div${prop} itemscope>${writeProps(value, new Set(), links, path)}</div>`;
 	throw new Error(`Not a JSON value: ${typeof value}`);
 }
 
-function writeProps(object: JsonObject, skip: ReadonlySet<string> = new Set()): string {
+function writeProps(
+	object: JsonObject,
+	skip: ReadonlySet<string>,
+	links: LinkResolver | null,
+	path: readonly string[],
+): string {
 	let html = "";
-	for (const [key, value] of Object.entries(object)) if (!skip.has(key)) html += writeValue(key, value);
+	for (const [key, value] of Object.entries(object)) if (!skip.has(key)) html += writeValue(key, value, links, path);
 	return html;
 }
 
-/** One entry as one row. Entries name their session; the header names itself. */
-export function entryToHtmlLine(entry: JsonObject, sessionId: string, owner?: string): string {
+/**
+ * One entry as one row. Entries name their session; the header names itself.
+ * `links` lets a writer mark reference values as `<link>` to other rows, using the
+ * same codec both runtimes share; leave null to write plain values.
+ */
+export function entryToHtmlLine(entry: JsonObject, sessionId: string, owner?: string, links?: LinkResolver): string {
 	if (owner !== undefined && !OWNER.test(owner))
 		throw new Error(`Owner must be a phone like +14155550100, not ${owner}`);
 	const typed = typeof entry.type === "string";
@@ -77,7 +101,7 @@ export function entryToHtmlLine(entry: JsonObject, sessionId: string, owner?: st
 		if ((key === "type" && typed) || (key === "id" && identified)) continue;
 		if (key === "parentId" && typeof value === "string")
 			html += `<link itemprop="parentId" href="${escapeAttribute(`${session}/${segment(value)}`)}">`;
-		else html += writeValue(key, value);
+		else html += writeValue(key, value, links ?? null, []);
 	}
 	return `${html}</article>`;
 }
@@ -91,9 +115,11 @@ function define(target: JsonObject, key: string, value: JsonValue) {
 class RowReader {
 	private at = 0;
 	private readonly line: string;
+	private readonly numericRefs: ReadonlySet<string> | null;
 
-	constructor(line: string) {
+	constructor(line: string, numericRefs: ReadonlySet<string> | null = null) {
 		this.line = line;
+		this.numericRefs = numericRefs;
 	}
 
 	private fail(expected: string): never {
@@ -135,24 +161,25 @@ class RowReader {
 			entry.type = itemtype.slice(ROOT.length + 1);
 		}
 		if (itemid !== undefined) entry.id = lastSegment(itemid);
-		this.props(entry, "</article>");
+		this.props(entry, "</article>", []);
 		if (this.at !== this.line.length) this.fail("the end of the row");
 		return entry;
 	}
 
-	private props(target: JsonObject, close: string) {
+	private props(target: JsonObject, close: string, path: readonly string[]) {
 		while (!this.take(close)) {
-			const { key, value } = this.element(true);
+			const { key, value } = this.element(true, path);
 			define(target, key as string, value);
 		}
 	}
 
-	private element(named: boolean): { key?: string; value: JsonValue } {
+	private element(named: boolean, path: readonly string[]): { key?: string; value: JsonValue } {
 		const tag = /^<(span|pre|data|link|div|ol)\b/.exec(this.line.slice(this.at, this.at + 6))?.[1];
 		if (!tag) this.fail("a value element");
 		this.at += tag.length + 1;
 		const key = this.attribute("itemprop");
 		if (named !== (key !== undefined)) this.fail(named ? "itemprop" : "no itemprop inside a list");
+		const childPath = key === undefined ? path : [...path, key];
 		switch (tag) {
 			case "span":
 			case "pre":
@@ -168,12 +195,13 @@ class RowReader {
 				const href = this.attribute("href");
 				if (href === undefined || !named) this.fail("a named link with href");
 				this.expect(">");
-				return { key, value: lastSegment(href) };
+				const value = lastSegment(href);
+				return this.numeric(childPath) && /^\d+$/.test(value) ? { key, value: Number(value) } : { key, value };
 			}
 			case "div": {
 				this.expect(" itemscope>");
 				const object: JsonObject = {};
-				this.props(object, "</div>");
+				this.props(object, "</div>", childPath);
 				return { key, value: object };
 			}
 			default: {
@@ -181,17 +209,28 @@ class RowReader {
 				const list: JsonValue[] = [];
 				while (!this.take("</ol>")) {
 					this.expect("<li>");
-					list.push(this.element(false).value);
+					list.push(this.element(false, childPath).value);
 					this.expect("</li>");
 				}
 				return { key, value: list };
 			}
 		}
 	}
+
+	private numeric(path: readonly string[]): boolean {
+		if (this.numericRefs === null) return false;
+		for (let i = path.length; i >= 1; i--) if (this.numericRefs.has(path.slice(0, i).join("."))) return true;
+		return false;
+	}
 }
 
-export function htmlLineToEntry(line: string): JsonObject {
-	return new RowReader(line).row();
+/**
+ * Read one row. `numericRefs` lists dotted key paths (for example `conversationId`,
+ * `owner.conversationId`) whose `<link>` values are numeric ids and should read back
+ * as numbers, the reverse of a writer's `LinkResolver`.
+ */
+export function htmlLineToEntry(line: string, numericRefs: ReadonlySet<string> | null = null): JsonObject {
+	return new RowReader(line, numericRefs).row();
 }
 
 /**
@@ -219,5 +258,5 @@ export function sessionHtmlToEntries(html: string): JsonObject[] {
 	return html
 		.split("\n")
 		.filter((line) => line.trim())
-		.map(htmlLineToEntry);
+		.map((line) => htmlLineToEntry(line));
 }

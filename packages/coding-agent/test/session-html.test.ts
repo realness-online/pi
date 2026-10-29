@@ -44,6 +44,17 @@ const assistant: JsonObject = {
 const roundTrip = (entry: JsonObject) => htmlLineToEntry(entryToHtmlLine(entry, SESSION));
 
 describe("session rows as HTML Lines", () => {
+	it("turns reference values into links and reads them back by the same key paths", () => {
+		const links = (path: string[], value: string) =>
+			["conversationId", "owner.conversationId"].includes(path.join(".")) ? `/items/${value}` : undefined;
+		const entry = { type: "entry", id: "9", parentId: "8", conversationId: 1, owner: { conversationId: 3, taskId: 4 } };
+		const row = entryToHtmlLine(entry, SESSION, undefined, links);
+		expect(row).toContain('<link itemprop="conversationId" href="/items/1">');
+		expect(row).toContain('<link itemprop="conversationId" href="/items/3">');
+		const back = htmlLineToEntry(row, new Set(["conversationId", "owner.conversationId"]));
+		expect(back).toEqual({ ...entry, parentId: "8" });
+	});
+
 	it("keeps lone surrogates through UTF-8", () => {
 		const entry = { type: "custom", id: "s1", parentId: null, text: "a\uD800b\uDC00c\uD83D\uDE00d" };
 		const row = entryToHtmlLine(entry, SESSION);
