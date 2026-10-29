@@ -47,7 +47,13 @@ describe("session rows as HTML Lines", () => {
 	it("turns reference values into links and reads them back by the same key paths", () => {
 		const links = (path: string[], value: string) =>
 			["conversationId", "owner.conversationId"].includes(path.join(".")) ? `/items/${value}` : undefined;
-		const entry = { type: "entry", id: "9", parentId: "8", conversationId: 1, owner: { conversationId: 3, taskId: 4 } };
+		const entry = {
+			type: "entry",
+			id: "9",
+			parentId: "8",
+			conversationId: 1,
+			owner: { conversationId: 3, taskId: 4 },
+		};
 		const row = entryToHtmlLine(entry, SESSION, undefined, links);
 		expect(row).toContain('<link itemprop="conversationId" href="/items/1">');
 		expect(row).toContain('<link itemprop="conversationId" href="/items/3">');
