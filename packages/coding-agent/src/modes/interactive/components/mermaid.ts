@@ -56,6 +56,17 @@ function themedLines(art: MermaidArt, theme: Theme): string[] {
 	return art.styled.map((row) => row.map((span) => styleSpan(span, theme)).join(""));
 }
 
+/** Swap the declared direction around: LR/RL build tall, TD/BT build wide. */
+function buildTall(source: string): MermaidArt | null {
+	const tall = source
+		.replace(/\bflowchart\s+LR\b/gi, "flowchart TD")
+		.replace(/\bflowchart\s+RL\b/gi, "flowchart TD")
+		.replace(/\bgraph\s+LR\b/gi, "graph TD")
+		.replace(/\bgraph\s+RL\b/gi, "graph TD");
+	if (tall === source) return null;
+	return render(tall);
+}
+
 /** Create a transformer that replaces top-level Mermaid code blocks with Unicode terminal diagrams. */
 export function createMermaidMarkdownTransformer(options: MermaidTransformerOptions): MarkdownTransformer {
 	return (markdown, context) => {
@@ -72,7 +83,12 @@ export function createMermaidMarkdownTransformer(options: MermaidTransformerOpti
 			.lexer(markdown)
 			.map((token) => {
 				if (!isMermaid(token)) return token.raw;
-				const art = render(token.text);
+				let art = render(token.text);
+				if (!art || art.width > context.availableWidth) {
+					// A side-by-side diagram too wide for the pane usually reads
+					// fine top-down, so build tall before dropping to raw text.
+					art = buildTall(token.text);
+				}
 				if (!art || art.width > context.availableWidth) return token.raw;
 				if (!context.isStreaming && art.warnings.length > 0) {
 					const suffix = art.warnings.length > 1 ? ` (+${art.warnings.length - 1} more)` : "";

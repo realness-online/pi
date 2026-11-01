@@ -37,12 +37,25 @@ describe("Mermaid rendering", () => {
 		expect(rendered).toContain("After");
 	});
 
-	it("leaves unsupported and oversized diagrams unchanged", () => {
+	it("leaves unsupported and unbuildable diagrams unchanged", () => {
 		const unsupported = '```mermaid\npie\n  title Pets\n  "Dogs" : 4\n```';
-		const oversized = "```mermaid\nflowchart LR\n  A[Start] --> B[Done]\n```";
+		// Even top-down this label row is wider than the pane, so nothing fits.
+		const oversized = "```mermaid\nflowchart LR\n  A[an extremely long label that itself overflows] --> B[Done]\n```";
 
 		expect(transformMermaid(unsupported)).toBe(unsupported);
-		expect(transformMermaid(oversized, { maxWidth: 10 })).toBe(oversized);
+		expect(transformMermaid(oversized, { maxWidth: 20 })).toBe(oversized);
+	});
+
+	it("builds a too-wide side-by-side diagram tall instead of dropping it", () => {
+		// Ten nodes in a row: far wider than any pane, fits fine top-down.
+		let chain = "flowchart LR\n";
+		for (let i = 0; i < 8; i++) chain += `  n${i}[~node ${i}~] --> n${i + 1}[~node ${i + 1}~]\n`;
+		const markdown = `\`\`\`mermaid\n${chain}\`\`\``;
+		const rendered = transformMermaid(markdown, { maxWidth: 60 });
+
+		expect(rendered).not.toContain("```mermaid");
+		expect(rendered).toContain("node 0");
+		expect(rendered).toContain("node 7");
 	});
 
 	it("maps semantic spans through the Pi theme", () => {
