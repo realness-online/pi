@@ -44,7 +44,7 @@ installation proof before selection. Its `rollback` action removes the marker
 and returns to the checkout's pinned runtime; this is not a previous-fork rollback.
 Keep the prior marker path when switching between verified fork installs.
 
-The harness's `npm run pi:update` reinstalls the reviewed checkout pin. It does
+The harness's `npm run pi:reinstall` reinstalls the reviewed checkout pin. It does
 not advance upstream or update a separately selected fork.
 
 Release verification helpers are in `../../artifacts/pi/review-v1.2.0/`.
