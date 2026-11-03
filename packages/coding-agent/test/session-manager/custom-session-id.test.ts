@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { SessionManager } from "../../src/core/session-manager.ts";
+import { read_html_session } from "../../src/core/session-storage.ts";
 
 const UUID_V7_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
@@ -204,10 +205,18 @@ describe("SessionManager.forkFrom", () => {
 
 			const forked = SessionManager.forkFrom(sourcePath, tempDir, join(tempDir, "sessions"));
 
-			const written = readFileSync(forked.getSessionFile()!, "utf8").trimEnd().split("\n");
-			expect(written).toHaveLength(51);
-			expect(JSON.parse(written[0]).parentSession).toBe(sourcePath);
-			expect(written.slice(1)).toEqual(lines.slice(1));
+			const sessionFile = forked.getSessionFile()!;
+			if (sessionFile.endsWith(".html.gz")) {
+				const entries = read_html_session(sessionFile);
+				expect(entries).toHaveLength(51);
+				expect(entries[0].parentSession).toBe(sourcePath);
+				expect(entries.slice(1)).toEqual(lines.slice(1).map((line) => JSON.parse(line)));
+			} else {
+				const written = readFileSync(sessionFile, "utf8").trimEnd().split("\n");
+				expect(written).toHaveLength(51);
+				expect(JSON.parse(written[0]).parentSession).toBe(sourcePath);
+				expect(written.slice(1)).toEqual(lines.slice(1));
+			}
 			expect(forked.getEntries()).toHaveLength(50);
 		} finally {
 			rmSync(tempDir, { recursive: true, force: true });

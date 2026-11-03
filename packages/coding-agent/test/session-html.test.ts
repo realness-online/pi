@@ -45,7 +45,7 @@ const roundTrip = (entry: JsonObject) => htmlLineToEntry(entryToHtmlLine(entry, 
 
 describe("session rows as HTML Lines", () => {
 	it("turns reference values into links and reads them back by the same key paths", () => {
-		const links = (path: string[], value: string) =>
+		const links = (path: readonly string[], value: string) =>
 			["conversationId", "owner.conversationId"].includes(path.join(".")) ? `/items/${value}` : undefined;
 		const entry = {
 			type: "entry",
