@@ -41,14 +41,8 @@ describe("Mermaid rendering", () => {
 	});
 
 	it("leaves unsupported and unbuildable diagrams unchanged", () => {
-		const unsupported = "```mermaid
-gantt
-  title Plan
-```";
-		const oversized = "```mermaid
-flowchart LR
-  A[an extremely long label that itself overflows] --> B[Done]
-```";
+		const unsupported = "```mermaid\ngantt\n  title Plan\n```";
+		const oversized = "```mermaid\nflowchart LR\n  A[an extremely long label that itself overflows] --> B[Done]\n```";
 
 		expect(transformMermaid(unsupported)).toBe(unsupported);
 		expect(transformMermaid(oversized, { maxWidth: 20 })).toBe(oversized);
