@@ -22,7 +22,9 @@ The `realness` branch carries local changes above an upstream base.
 5. Merge the target into the update branch. Keep local commits in history;
    do not reset to upstream, force push, or replace the active install in place.
 6. Resolve conflicts against the required behavior above. Review changed APIs,
-   packaging scripts, dependency locks, and session consumers.
+   packaging scripts, dependency locks, and session consumers. Read each
+   package's CHANGELOG "Breaking Changes" from the base to the target, and
+   name the downstream consumer (below) each one touches.
 7. Install dependencies with `npm ci --ignore-scripts`. Run `npm run check`
    and focused session tests in JSONL and compressed HTML modes.
 8. Build and pack a separate install. Use the target's packaging helpers;
@@ -35,6 +37,26 @@ The `realness` branch carries local changes above an upstream base.
     live sessions or convert history as part of an update.
 12. Verify the launcher resolves to the new install. Roll back by restoring
     the previous verified install path; preserve history in either direction.
+13. Push the `realness` branch to `fork`, and push each consumer changed in
+    the steps below.
+
+## Downstream consumers
+
+Each consumer builds and passes against the target before step 11. A stale
+build hides a removed export: run `npm run build` here first, so every
+package's `dist` matches the target source.
+
+1. Harness extensions, `../../.pi/extensions`. Run `npm run check` and
+   `npm test` at the Realness root. Fix extensions for render and event API
+   changes.
+2. Storage module, `../pi-durable-storage-html`. It implements durable's
+   `Storage` and links these packages. Run `npx vitest --run` there; all tests
+   pass. Set its `package.json` versions to the target. Commit and push.
+3. Browser chat bundle, `../../apps/realness`. Run
+   `node durable-lock.js write`, `npm run build:durable`, and
+   `npx vp test run -c vitest.config.browser.js specs/app/browser/chat-durable.spec.js`.
+   `src/app/utils/explorer.js` and `durable-entry.js` use the durable API.
+   Commit `durable.lock.json` with the app change.
 
 ## Harness integration
 
@@ -47,7 +69,8 @@ Keep the prior marker path when switching between verified fork installs.
 The harness's `npm run pi:reinstall` reinstalls the reviewed checkout pin. It does
 not advance upstream or update a separately selected fork.
 
-Release verification helpers are in `../../artifacts/pi/review-v1.2.0/`.
-Review them against the target's packaging APIs before reuse. They are not a
-stable upstream interface. Hydrate model data before checking a fresh worktree;
-build workspace dependencies before tests that spawn Node subprocesses.
+Release verification helpers were in `../../artifacts/pi/review-v1.2.0/`;
+artifacts are scratch and were pruned. Write helpers for a release beside this
+file, against the target's packaging APIs. Hydrate model data before checking a
+fresh worktree; build workspace dependencies before tests that spawn Node
+subprocesses.
