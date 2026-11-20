@@ -122,7 +122,7 @@ import type { ModelRuntime } from "./model-runtime.ts";
 import { NestedToolCallRunner } from "./nested-tool-calls.ts";
 import { expandPromptTemplate, type PromptTemplate } from "./prompt-templates.ts";
 import type { ResourceExtensionPaths, ResourceLoader } from "./resource-loader.ts";
-import { exportSessionToJsonl } from "./session-export.ts";
+import { exportSessionToHtmlGz, exportSessionToJsonl } from "./session-export.ts";
 import {
 	type BranchSummaryEntry,
 	type CompactionEntry,
@@ -3528,11 +3528,13 @@ export class AgentSession {
 				sourceInfo: template.sourceInfo,
 			}));
 
+			const hiddenSkills = new Set(this.settingsManager.getHiddenSkills());
 			const skills: SlashCommandInfo[] = this._resourceLoader.getSkills().skills.map((skill) => ({
 				name: `skill:${skill.name}`,
 				description: skill.description,
 				source: "skill",
 				sourceInfo: skill.sourceInfo,
+				...(skill.hidden || hiddenSkills.has(skill.name) ? { hidden: true } : {}),
 			}));
 
 			return [...extensionCommands, ...templates, ...skills];
@@ -4480,6 +4482,10 @@ export class AgentSession {
 	 */
 	exportToJsonl(outputPath?: string): string {
 		return exportSessionToJsonl(this.sessionManager, outputPath);
+	}
+
+	exportToHtmlGz(outputPath?: string): string {
+		return exportSessionToHtmlGz(this.sessionManager, outputPath);
 	}
 
 	/**

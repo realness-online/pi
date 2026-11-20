@@ -219,6 +219,7 @@ describe("AgentSession prompt characterization", () => {
 						description: "Test skill",
 						filePath: skillPath,
 						disableModelInvocation: false,
+						hidden: false,
 						baseDir: tempDir,
 						sourceInfo: createSyntheticSourceInfo(skillPath, {
 							source: "local",

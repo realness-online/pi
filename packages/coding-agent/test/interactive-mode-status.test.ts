@@ -650,10 +650,11 @@ describe("InteractiveMode.createBaseAutocompleteProvider", () => {
 				extensionRunner: { getRegisteredCommands: () => [] };
 				resourceLoader: { getSkills: () => { skills: [] } };
 			};
-			settingsManager: { getEnableSkillCommands: () => boolean };
+			settingsManager: { getEnableSkillCommands: () => boolean; getHiddenSkills: () => string[] };
 			skillCommands: Map<string, string>;
 			sessionManager: { getCwd: () => string };
 			fdPath: null;
+			prefixAutocompleteDescription: (description?: string) => string | undefined;
 		};
 
 		const createBaseAutocompleteProvider = (
@@ -673,10 +674,11 @@ describe("InteractiveMode.createBaseAutocompleteProvider", () => {
 				extensionRunner: { getRegisteredCommands: () => [] },
 				resourceLoader: { getSkills: () => ({ skills: [] }) },
 			},
-			settingsManager: { getEnableSkillCommands: () => false },
+			settingsManager: { getEnableSkillCommands: () => false, getHiddenSkills: () => [] },
 			skillCommands: new Map(),
 			sessionManager: { getCwd: () => "/tmp" },
 			fdPath: null,
+			prefixAutocompleteDescription: (description?: string) => description,
 		};
 
 		const provider = createBaseAutocompleteProvider.call(fakeThis);
@@ -700,7 +702,7 @@ describe("InteractiveMode.createBaseAutocompleteProvider", () => {
 				extensionRunner: { getRegisteredCommands: () => [] };
 				resourceLoader: { getSkills: () => { skills: [] } };
 			};
-			settingsManager: { getEnableSkillCommands: () => boolean };
+			settingsManager: { getEnableSkillCommands: () => boolean; getHiddenSkills: () => string[] };
 			skillCommands: Map<string, string>;
 			sessionManager: { getCwd: () => string };
 			fdPath: null;
@@ -720,7 +722,7 @@ describe("InteractiveMode.createBaseAutocompleteProvider", () => {
 				extensionRunner: { getRegisteredCommands: () => [] },
 				resourceLoader: { getSkills: () => ({ skills: [] }) },
 			},
-			settingsManager: { getEnableSkillCommands: () => false },
+			settingsManager: { getEnableSkillCommands: () => false, getHiddenSkills: () => [] },
 			skillCommands: new Map(),
 			sessionManager: { getCwd: () => "/tmp" },
 			fdPath: null,
@@ -752,6 +754,89 @@ describe("InteractiveMode.createBaseAutocompleteProvider", () => {
 			signal: new AbortController().signal,
 		});
 		expect(radiusSuggestions?.items).toEqual([{ value: "radius", label: "radius", description: "Radius · account" }]);
+	});
+
+	test("keeps hidden commands out of the palette but able to run", async () => {
+		type FakeInteractiveMode = {
+			session: {
+				scopedModels: [];
+				modelRuntime: { getAvailableSnapshot: () => [] };
+				promptTemplates: [];
+				extensionRunner: { getRegisteredCommands: () => Array<Record<string, unknown>> };
+				resourceLoader: { getSkills: () => { skills: Array<Record<string, unknown>> } };
+			};
+			settingsManager: { getEnableSkillCommands: () => boolean; getHiddenSkills: () => string[] };
+			skillCommands: Map<string, string>;
+			sessionManager: { getCwd: () => string };
+			fdPath: null;
+			prefixAutocompleteDescription: (description?: string) => string | undefined;
+		};
+
+		const createBaseAutocompleteProvider = (
+			InteractiveMode as unknown as {
+				prototype: { createBaseAutocompleteProvider(this: FakeInteractiveMode): AutocompleteProvider };
+			}
+		).prototype.createBaseAutocompleteProvider;
+		const sourceInfo = { source: "test", path: "/tmp/x" } as SourceInfo;
+		const fakeThis: FakeInteractiveMode = {
+			session: {
+				scopedModels: [],
+				modelRuntime: { getAvailableSnapshot: () => [] },
+				promptTemplates: [],
+				extensionRunner: {
+					getRegisteredCommands: () => [
+						{
+							name: "shown",
+							invocationName: "shown",
+							description: "Shown.",
+							sourceInfo,
+							handler: async () => {},
+						},
+						{
+							name: "quiet",
+							invocationName: "quiet",
+							description: "Quiet.",
+							hidden: true,
+							sourceInfo,
+							handler: async () => {},
+						},
+					],
+				},
+				resourceLoader: {
+					getSkills: () => ({
+						skills: [
+							{ name: "plain", description: "Plain.", filePath: "/tmp/plain", hidden: false, sourceInfo },
+							{ name: "sneaky", description: "Sneaky.", filePath: "/tmp/sneaky", hidden: true, sourceInfo },
+							{ name: "muted", description: "Muted.", filePath: "/tmp/muted", hidden: false, sourceInfo },
+						],
+					}),
+				},
+			},
+			settingsManager: {
+				getEnableSkillCommands: () => true,
+				getHiddenSkills: () => ["muted"],
+			},
+			skillCommands: new Map(),
+			sessionManager: { getCwd: () => "/tmp" },
+			fdPath: null,
+			prefixAutocompleteDescription: (description?: string) => description,
+		};
+
+		const provider = createBaseAutocompleteProvider.call(fakeThis);
+		const line = "/";
+		const suggestions = await provider.getSuggestions([line], 0, line.length, {
+			signal: new AbortController().signal,
+		});
+		const values = suggestions?.items.map((item) => item.value) ?? [];
+
+		// Typed commands still run; the palette leaves them out.
+		expect(values).toContain("shown");
+		expect(values).toContain("skill:plain");
+		expect(values).not.toContain("quiet");
+		expect(values).not.toContain("skill:sneaky");
+		// A harness setting hides a skill from an installed package, which it cannot edit.
+		expect(values).not.toContain("skill:muted");
+		expect(fakeThis.skillCommands.has("skill:sneaky")).toBe(true);
 	});
 });
 describe("InteractiveMode.showLoadedResources", () => {

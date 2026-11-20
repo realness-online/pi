@@ -255,6 +255,8 @@ export interface SlashCommand {
 	name: string;
 	description?: string;
 	argumentHint?: string;
+	/** Kept for argument completion; left out of the command list. */
+	hidden?: boolean;
 	// Function to get argument completions for this command
 	// Returns null if no argument completion is available
 	getArgumentCompletions?(argumentPrefix: string): Awaitable<AutocompleteItem[] | null>;
@@ -338,17 +340,19 @@ export class CombinedAutocompleteProvider implements AutocompleteProvider {
 
 			if (spaceIndex === -1) {
 				const prefix = commandText.slice(1);
-				const commandItems = this.commands.map((cmd) => {
-					const name = "name" in cmd ? cmd.name : cmd.value;
-					const hint = "argumentHint" in cmd && cmd.argumentHint ? cmd.argumentHint : undefined;
-					const desc = cmd.description ?? "";
-					const fullDesc = hint ? (desc ? `${hint} — ${desc}` : hint) : desc;
-					return {
-						name,
-						label: name,
-						description: fullDesc || undefined,
-					};
-				});
+				const commandItems = this.commands
+					.filter((cmd) => !("hidden" in cmd && cmd.hidden))
+					.map((cmd) => {
+						const name = "name" in cmd ? cmd.name : cmd.value;
+						const hint = "argumentHint" in cmd && cmd.argumentHint ? cmd.argumentHint : undefined;
+						const desc = cmd.description ?? "";
+						const fullDesc = hint ? (desc ? `${hint} — ${desc}` : hint) : desc;
+						return {
+							name,
+							label: name,
+							description: fullDesc || undefined,
+						};
+					});
 
 				const bareNameMatches = fuzzyFilter(commandItems, prefix, (item) =>
 					item.name.startsWith("skill:") ? item.name.slice("skill:".length) : item.name,

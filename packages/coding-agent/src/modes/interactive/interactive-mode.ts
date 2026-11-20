@@ -756,6 +756,7 @@ export class InteractiveMode {
 			name: command.name,
 			description: command.description,
 			...(command.argumentHint && { argumentHint: command.argumentHint }),
+			...(command.hidden && { hidden: true }),
 		}));
 
 		const modelCommand = slashCommands.find((command) => command.name === "model");
@@ -827,18 +828,21 @@ export class InteractiveMode {
 				name: cmd.invocationName,
 				description: this.prefixAutocompleteDescription(cmd.description, cmd.sourceInfo),
 				getArgumentCompletions: cmd.getArgumentCompletions,
+				...(cmd.hidden && { hidden: true }),
 			}));
 
 		// Build skill commands from session.skills (if enabled)
 		this.skillCommands.clear();
 		const skillCommandList: SlashCommand[] = [];
 		if (this.settingsManager.getEnableSkillCommands()) {
+			const hiddenSkills = new Set(this.settingsManager.getHiddenSkills());
 			for (const skill of this.session.resourceLoader.getSkills().skills) {
 				const commandName = `skill:${skill.name}`;
 				this.skillCommands.set(commandName, skill.filePath);
 				skillCommandList.push({
 					name: commandName,
 					description: this.prefixAutocompleteDescription(skill.description, skill.sourceInfo),
+					...(skill.hidden || hiddenSkills.has(skill.name) ? { hidden: true } : {}),
 				});
 			}
 		}
@@ -6709,7 +6713,10 @@ export class InteractiveMode {
 		const outputPath = this.getPathCommandArgument(text, "/export");
 
 		try {
-			if (outputPath?.endsWith(".jsonl")) {
+			if (outputPath?.endsWith(".html.gz")) {
+				const filePath = this.session.exportToHtmlGz(outputPath);
+				this.showStatus(`Session exported to: ${filePath}`);
+			} else if (outputPath?.endsWith(".jsonl")) {
 				const filePath = this.session.exportToJsonl(outputPath);
 				this.showStatus(`Session exported to: ${filePath}`);
 			} else {
@@ -6755,7 +6762,7 @@ export class InteractiveMode {
 	private async handleImportCommand(text: string): Promise<void> {
 		const inputPath = this.getPathCommandArgument(text, "/import");
 		if (!inputPath) {
-			this.showError("Usage: /import <path.jsonl>");
+			this.showError("Usage: /import <path.html.gz|path.jsonl>");
 			return;
 		}
 

@@ -14,6 +14,7 @@ function createTestSkill(options: {
 	filePath: string;
 	baseDir: string;
 	disableModelInvocation?: boolean;
+	hidden?: boolean;
 	source?: string;
 }): Skill {
 	return {
@@ -23,6 +24,7 @@ function createTestSkill(options: {
 		baseDir: options.baseDir,
 		sourceInfo: createSyntheticSourceInfo(options.filePath, { source: options.source ?? "test" }),
 		disableModelInvocation: options.disableModelInvocation ?? false,
+		hidden: options.hidden ?? false,
 	};
 }
 

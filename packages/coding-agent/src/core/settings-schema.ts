@@ -335,6 +335,11 @@ export const SettingsSchema = Type.Object(
 				default: SETTINGS_DEFAULTS.enableSkillCommands,
 			}),
 		),
+		hiddenSkills: Type.Optional(
+			Type.Array(Type.String(), {
+				description: "Skill names kept out of the slash palette; the agent still loads them.",
+			}),
+		),
 		terminal: Type.Optional(TerminalSettingsSchema),
 		images: Type.Optional(ImageSettingsSchema),
 		enabledModels: Type.Optional(

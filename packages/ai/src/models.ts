@@ -561,7 +561,7 @@ class ModelsImpl implements MutableModels {
 		const stored = await this.modelsStore.read(provider.id, { signal });
 		await provider.refreshModels({
 			credential,
-			stored: stored ? withKnownModelTypes(structuredClone(stored)) : undefined,
+			stored: stored ? withKnownModelTypes(stored) : undefined,
 			publish: (publication) => this.publishProviderModels(provider.id, generation, signal, publication),
 			allowNetwork,
 			force: allowNetwork ? force : undefined,

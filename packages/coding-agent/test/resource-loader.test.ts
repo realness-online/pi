@@ -980,6 +980,7 @@ Content`,
 				baseDir: "/fake",
 				sourceInfo: createSyntheticSourceInfo("/fake/path", { source: "custom" }),
 				disableModelInvocation: false,
+				hidden: false,
 			};
 			const loader = new DefaultResourceLoader({
 				cwd,

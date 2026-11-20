@@ -1185,6 +1185,11 @@ export class SettingsManager {
 		return this.settings.enableSkillCommands ?? SETTINGS_DEFAULTS.enableSkillCommands;
 	}
 
+	/** Skill names the slash palette leaves out; the agent still loads them. */
+	getHiddenSkills(): string[] {
+		return this.settings.hiddenSkills ?? [];
+	}
+
 	setEnableSkillCommands(enabled: boolean): void {
 		this.globalSettings.enableSkillCommands = enabled;
 		this.markModified("enableSkillCommands");

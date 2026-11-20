@@ -8,37 +8,49 @@ export interface SlashCommandInfo {
 	description?: string;
 	source: SlashCommandSource;
 	sourceInfo: SourceInfo;
+	/** Typed commands still run; the palette hides them. */
+	hidden?: boolean;
 }
 
 export interface BuiltinSlashCommand {
 	name: string;
 	description: string;
 	argumentHint?: string;
+	/** Typed commands still run; the palette hides them. */
+	hidden?: boolean;
 }
 
 export const BUILTIN_SLASH_COMMANDS: ReadonlyArray<BuiltinSlashCommand> = [
-	{ name: "settings", description: "Open settings menu" },
+	{ name: "settings", description: "Open settings menu", hidden: true },
 	{ name: "model", description: "Select model (opens selector UI)", argumentHint: "<provider/model>" },
-	{ name: "tree", description: "Navigate session tree (switch branches)" },
-	{ name: "thinking", description: "Set thinking level", argumentHint: "<level>" },
-	{ name: "scoped-models", description: "Enable/disable models for Ctrl+P cycling" },
-	{ name: "export", description: "Export session (HTML default, or specify path: .html/.jsonl)" },
-	{ name: "import", description: "Import a JSONL session, preserving its ID and working directory" },
-	{ name: "share", description: "Share session via a Radius artifact or a GitHub gist" },
-	{ name: "bug", description: "Report a bug to the Pi developers", argumentHint: "<description>" },
-	{ name: "copy", description: "Copy last agent message to clipboard" },
-	{ name: "name", description: "Set session display name" },
-	{ name: "session", description: "Show session info and stats" },
-	{ name: "changelog", description: "Show changelog entries" },
-	{ name: "hotkeys", description: "Show all keyboard shortcuts" },
-	{ name: "fork", description: "Create a new fork from a previous user message" },
-	{ name: "clone", description: "Duplicate the current session at the current position" },
-	{ name: "trust", description: "Save project trust decision for future sessions" },
-	{ name: "login", description: "Configure provider authentication", argumentHint: "<provider>" },
-	{ name: "logout", description: "Remove provider authentication" },
+	{ name: "tree", description: "Navigate session tree (switch branches)", hidden: true },
+	{ name: "thinking", description: "Set thinking level", argumentHint: "<level>", hidden: true },
+	{ name: "scoped-models", description: "Enable/disable models for Ctrl+P cycling", hidden: true },
+	{
+		name: "export",
+		description: "Export session (HTML page by default, or a path ending .html, .html.gz, or .jsonl)",
+		hidden: true,
+	},
+	{
+		name: "import",
+		description: "Import a session (.html.gz or .jsonl), preserving its ID and working directory",
+		hidden: true,
+	},
+	{ name: "share", description: "Share session via a Radius artifact or a GitHub gist", hidden: true },
+	{ name: "bug", description: "Report a bug to the Pi developers", argumentHint: "<description>", hidden: true },
+	{ name: "copy", description: "Copy last agent message to clipboard", hidden: true },
+	{ name: "name", description: "Set session display name", hidden: true },
+	{ name: "session", description: "Show session info and stats", hidden: true },
+	{ name: "changelog", description: "Show changelog entries", hidden: true },
+	{ name: "hotkeys", description: "Show all keyboard shortcuts", hidden: true },
+	{ name: "fork", description: "Create a new fork from a previous user message", hidden: true },
+	{ name: "clone", description: "Duplicate the current session at the current position", hidden: true },
+	{ name: "trust", description: "Save project trust decision for future sessions", hidden: true },
+	{ name: "login", description: "Configure provider authentication", argumentHint: "<provider>", hidden: true },
+	{ name: "logout", description: "Remove provider authentication", hidden: true },
 	{ name: "new", description: "Start a new session" },
 	{ name: "compact", description: "Manually compact the session context" },
 	{ name: "resume", description: "Resume another session" },
 	{ name: "reload", description: "Reload keybindings, extensions, skills, prompts, themes, and context files" },
-	{ name: "quit", description: `Quit ${APP_NAME}` },
+	{ name: "quit", description: `Quit ${APP_NAME}`, hidden: true },
 ];

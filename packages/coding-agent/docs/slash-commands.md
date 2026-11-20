@@ -4,16 +4,18 @@ Type `/` in Pi's terminal editor to search the commands available in the current
 
 Extensions, prompt templates, and skills can add commands. The command menu in Pi is therefore the exact reference for the resources loaded in your session.
 
+A command marked `hidden` keeps working when typed, and leaves the menu. A command marked † in the tables below stays out of the menu. Built-in commands, extension commands, and skills with `hidden: true` in their frontmatter all follow this rule; hidden skills still load when a task matches.
+
 ## Models and settings
 
 | Command | Description |
 |---|---|
-| `/settings` | Open settings |
+| `/settings†` | Open settings |
 | `/model [provider/model]` | Select a model |
-| `/thinking [level]` | Set the thinking level |
-| `/scoped-models` | Configure the models used by interactive cycling |
-| `/login [provider]` | Add provider authentication |
-| `/logout` | Remove provider authentication |
+| `/thinking† [level]` | Set the thinking level |
+| `/scoped-models†` | Configure the models used by interactive cycling |
+| `/login† [provider]` | Add provider authentication |
+| `/logout†` | Remove provider authentication |
 | `/llama` | Manage models on the configured llama.cpp router |
 
 ## Sessions and context
@@ -22,22 +24,22 @@ Extensions, prompt templates, and skills can add commands. The command menu in P
 |---|---|
 | `/new` | Start a new session |
 | `/resume` | Resume another session |
-| `/name [name]` | Set the session display name, or show the current name when omitted |
-| `/session` | Show current session information and statistics |
-| `/tree` | Navigate the session tree |
-| `/fork` | Create a new session from an earlier user message |
-| `/clone` | Duplicate the current session at its current position |
+| `/name† [name]` | Set the session display name, or show the current name when omitted |
+| `/session†` | Show current session information and statistics |
+| `/tree†` | Navigate the session tree |
+| `/fork†` | Create a new session from an earlier user message |
+| `/clone†` | Duplicate the current session at its current position |
 | `/compact [instructions]` | Compact the current context, optionally with custom instructions |
-| `/import <path>` | Import a JSONL session, preserving its ID and working directory |
+| `/import† <path>` | Import a session (.html.gz or .jsonl), preserving its ID and working directory |
 
 ## Export and share
 
 | Command | Description |
 |---|---|
-| `/copy` | Copy the last assistant message |
-| `/export [path]` | Export the session as HTML or JSONL |
-| `/share` | Upload the session and return a viewer link |
-| `/bug [description]` | Prepare a private bug report for the Pi developers |
+| `/copy†` | Copy the last assistant message |
+| `/export† [path]` | Export the session as an HTML page, or as a session file (.html.gz or .jsonl) to import later |
+| `/share†` | Upload the session and return a viewer link |
+| `/bug† [description]` | Prepare a private bug report for the Pi developers |
 
 Review a session before exporting or sharing it. Sessions can contain prompts, tool arguments, command output, file contents, and credentials exposed during the conversation.
 
@@ -45,12 +47,12 @@ Review a session before exporting or sharing it. Sessions can contain prompts, t
 
 | Command | Description |
 |---|---|
-| `/trust` | Save a project trust decision for future Pi processes |
+| `/trust†` | Save a project trust decision for future Pi processes |
 | `/mcp` | Manage MCP servers: sign in, reconnect, enable or disable, and change exposure |
 | `/reload` | Reload keybindings, extensions, skills, templates, themes, and context files |
-| `/hotkeys` | Show active keyboard shortcuts |
-| `/changelog` | Show changelog entries |
-| `/quit` | Quit Pi |
+| `/hotkeys†` | Show active keyboard shortcuts |
+| `/changelog†` | Show changelog entries |
+| `/quit†` | Quit Pi |
 
 ## Commands added by resources
 

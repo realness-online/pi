@@ -348,6 +348,25 @@ describe("Models runtime", () => {
 		finishAuth?.();
 	});
 
+	it("passes the store's read copy to refreshModels without copying it again", async () => {
+		const entry: ModelsStoreEntry = { models: [testModel("dynamic", "stored")] };
+		const store: ModelsStore = { read: async () => entry, write: async () => {}, delete: async () => {} };
+		let given: unknown;
+		const models = createModels({ modelsStore: store });
+		models.setProvider(
+			testProvider({
+				id: "dynamic",
+				refreshModels: async (context) => {
+					given = context.stored?.models[0];
+				},
+			}),
+		);
+
+		await models.refresh({ allowNetwork: false });
+
+		expect(given).toBe(entry.models[0]);
+	});
+
 	it("lets providers choose persistent deletion and ephemeral publication atomically", async () => {
 		let entry: ModelsStoreEntry | undefined = { models: [testModel("dynamic", "stored")] };
 		const store: ModelsStore = {

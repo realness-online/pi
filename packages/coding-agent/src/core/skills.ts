@@ -78,6 +78,8 @@ export interface Skill {
 	baseDir: string;
 	sourceInfo: SourceInfo;
 	disableModelInvocation: boolean;
+	/** The agent still loads it; the slash palette hides it. */
+	hidden: boolean;
 }
 
 export interface LoadSkillsResult {
@@ -339,6 +341,7 @@ function loadSkillFromFile(
 			baseDir: skillDir,
 			sourceInfo: createSkillSourceInfo(filePath, skillDir, source),
 			disableModelInvocation: frontmatter["disable-model-invocation"] === true,
+			hidden: frontmatter.hidden === true,
 		},
 		diagnostics,
 	};

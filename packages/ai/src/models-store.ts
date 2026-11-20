@@ -20,6 +20,7 @@ export interface ModelsStoreOperationOptions {
 
 /** Persistent model catalogs keyed by provider ID. */
 export interface ModelsStore {
+	/** Returns a copy the caller owns and may change. */
 	read(providerId: string, options?: ModelsStoreOperationOptions): Promise<ModelsStoreEntry | undefined>;
 	write(providerId: string, entry: ModelsStoreEntry, options?: ModelsStoreOperationOptions): Promise<void>;
 	delete(providerId: string, options?: ModelsStoreOperationOptions): Promise<void>;

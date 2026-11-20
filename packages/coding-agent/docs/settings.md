@@ -158,6 +158,7 @@ Resource paths in user settings resolve from the agent directory. Paths in proje
 | `prompts` | `string[]` | `[]` | Prompt-template files or directories. |
 | `themes` | `string[]` | `[]` | Theme files or directories. |
 | `enableSkillCommands` | boolean | `true` | Register skills as `/skill:name` commands. |
+| `hiddenSkills` | `string[]` | `[]` | Skill names kept out of the slash palette. The model still loads them when a task matches. |
 
 Resource arrays support glob exclusions with `!pattern`, exact inclusion with `+path`, and exact exclusion with `-path`. Pi loads resources listed in both user-level and project settings.
 

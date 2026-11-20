@@ -126,6 +126,14 @@ describe("provider retry classification", () => {
 		).toBe(false);
 	});
 
+	it.each([
+		"You are out of credits. To continue, enable fallback or switch models.",
+		'{"type":"error","error":{"type":"rate_limit_error","message":"credits_required"}}',
+		"insufficient credits for this request",
+	])("keeps an out-of-credits error non-retryable: %s", (errorMessage) => {
+		expect(isRetryableAssistantError(fauxAssistantMessage("", { stopReason: "error", errorMessage }))).toBe(false);
+	});
+
 	it("keeps the ChatGPT subscription usage limit non-retryable", () => {
 		const errorMessage =
 			'OpenAI API error (429): {"code":"subscription_sharing_usage_limit_exceeded","message":"Usage limit reached."}';
